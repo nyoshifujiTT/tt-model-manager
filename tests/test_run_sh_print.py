@@ -32,6 +32,15 @@ def test_print_quotes_args_so_they_round_trip(tmp_path):
     (ttnn / "build" / "lib").mkdir(parents=True)
     (ttnn / "__init__.py").write_text("")
     (ttnn / "build" / "lib" / "_ttnncpp.so").write_text("")
+    # run.sh's SFPI gate runs before the print path and a MISSING SFPI is fatal even under
+    # TT_MODEL_PRINT=1, so give the fake ttnn a local SFPI (no sfpi-version => no version check).
+    sfpi = ttnn / "runtime" / "sfpi"
+    (sfpi / "compiler" / "bin").mkdir(parents=True)
+    (sfpi / "include").mkdir()
+    (sfpi / "include" / "sfpi_lib.h").write_text("// test\n")
+    gxx = sfpi / "compiler" / "bin" / "riscv-tt-elf-g++"
+    gxx.write_text("#!/bin/sh\necho 'riscv-tt-elf-g++ (tenstorrent/sfpi:7.78.0[935]) 15.1.0'\n")
+    gxx.chmod(0o700)
 
     env = {**os.environ, "PYTHONPATH": str(tmp_path / "site"), "TT_MODEL_PRINT": "1"}
     r = subprocess.run(["bash", str(b / "run.sh"), "--extra", "x y"], env=env,
