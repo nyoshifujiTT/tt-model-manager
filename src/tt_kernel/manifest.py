@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 # Current authored schema. ``stage_package`` writes "5" and ``stage_thin_package`` writes "6";
 # this is only the default for a bare ``Manifest(...)``.
@@ -163,6 +163,12 @@ class Deps(BaseModel):
     alongside ``model.py`` and is also put on PYTHONPATH (issue #127); ``verify`` holds install-time
     ``python -c`` sanity checks. SFPI and firmware are external, box-managed deps — never in here.
 
+    ``custom_ops`` is METADATA, not an install list: at package time the tool records which of the
+    shipped ``generic_op`` wheels ``model.py`` actually imports, so a reader (catalog, provenance)
+    can see the model's custom ops without the author hand-maintaining a list. The wheels still
+    ship and install via ``wheels`` exactly as before — ``custom_ops`` is a derived, labeled subset
+    and never drives installation.
+
     ``kind`` picks the serving front end ``render_run_sh`` puts in ``run.sh``, mirroring the v5.1
     container schema's ``ContainerSpec.kind`` (see ``launchers.py``) so an author who has already
     published a ``tt-dit-server`` container recognizes the same term here. ``"vllm"`` (the
@@ -183,6 +189,10 @@ class Deps(BaseModel):
     wheels_dir: Optional[str] = None         # bundle dir holding those wheels -> also on --find-links
     # Bundle-relative model-library wheels installed by path with the requirements transaction.
     models_wheels: List[str] = Field(default_factory=list)
+    # Bundle-relative paths of the shipped custom-op (``generic_op``) wheels that ``model.py``
+    # imports. Auto-derived at package time (see packaging.stage_thin_package) — METADATA only,
+    # for discovery/provenance. A subset of ``wheels``; it never drives installation.
+    custom_ops: List[str] = Field(default_factory=list)
     # vLLM core install (empty-target, for the plugin). None => bundle serves no vLLM (non-vLLM model).
     vllm: Optional["Vllm"] = None
     model_dir: str = "."                     # where model.py lives (bundle root), added to PYTHONPATH
@@ -199,6 +209,14 @@ class Deps(BaseModel):
     # The ASGI entrypoint ("module:attribute") a "tt-dit-server" kind serves with uvicorn — the v6
     # analog of ContainerSpec.runtime["app"]. Unused (must be None) for kind="vllm".
     app: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_custom_ops(self, handler):
+        """Leave ``custom_ops`` out when empty so a bundle with no ops carries no stray field."""
+        data = handler(self)
+        if not self.custom_ops:
+            data.pop("custom_ops", None)
+        return data
 
 
 class Mesh(BaseModel):

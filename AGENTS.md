@@ -48,6 +48,9 @@ violates one of these is wrong even if tests pass:
      holds install-time sanity checks (issue #127).
 
    In every case the engine that serves is the one the bundle builds rather than a shared host install.
+   A v6 bundle's custom-op (`generic_op`) wheels are **auto-recorded in `deps.custom_ops`** from what
+   `model.py` imports — metadata only (discovery/provenance), never an install list; `--ops-wheel`
+   shipping and the by-path install are unchanged.
 5. **Manifest support is gated on `SUPPORTED_SCHEMAS`.** A bundle whose `schema_version` is not
    in `manifest.py`'s `SUPPORTED_SCHEMAS` is refused ("re-publish the bundle with a current
    `tt-model`") rather than silently half-read. Bump `SCHEMA_VERSION` only for a genuinely new
