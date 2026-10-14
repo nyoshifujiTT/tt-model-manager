@@ -102,6 +102,7 @@ Fields, from `src/tt_kernel/container_manifest.py`:
 | `repo` | the namespaced HF id `push` publishes to, e.g. `you/my-model`. |
 | `name` | the model name; also the default image repository. |
 | `weights` | an HF id **or** a `{repo, revision, allow_patterns, ignore_patterns}` mapping. A pointer — never baked in. Pin a revision so a consumer gets the weights you validated, not whatever the default branch points at today. |
+| `auxiliary_weights` | optional list of extra weight pointers (same HF id / `{repo, revision, ...}` shape), for a model that needs more than one checkpoint — a drafter or an adapter alongside the base. Each is pinned and fetched the same way and exported to the container as `TT_AUXILIARY_WEIGHTS=repo@rev,…`. **Note:** an auxiliary entry's `allow_patterns`/`ignore_patterns` pin the *published* bundle but do **not** reach the serve-time prefetch — an online first start fetches the whole aux repo. Narrow it by pre-fetching with the patterns, or keep aux repos lean. |
 | `kind` | the serving stack + launch command: `vllm-plugin` (default), `vllm-fork`, `tt-dit-server`, or `http-server`. See below. |
 | `arch` | `blackhole` or `wormhole_b0` — fixed by the build; every profile shares it. |
 | `source.tt_metal` | a local checkout path (default, hermetic — packages exactly the tree you validated, uncommitted work included) or `{repo, ref}` to clone in CI. |
