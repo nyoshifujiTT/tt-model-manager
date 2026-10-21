@@ -110,7 +110,7 @@ Fields, from `src/tt_kernel/container_manifest.py`:
 | `source.ubuntu` | base image version, e.g. `"22.04"`. |
 | `source.python` | interpreter, e.g. `"3.12"` — independent of ubuntu; `uv` provides it. |
 | `runtime` | kind-specific (see below): the vLLM form, the plugin form, `extra_models_dir`, an optional `lock`, extra `wheels`, resolution `overrides`. |
-| `serve` | the launch defaults every profile inherits (`ServeSettings`): `port`, `mesh_device`, `hardware`, `max_num_seqs`, `block_size`, `max_model_len`, `capabilities` (tool/reasoning parsers), `additional_config`, `env`, `args`. |
+| `serve` | the launch defaults every profile inherits (`ServeSettings`): `port`, `mesh_device`, `hardware`, `max_num_seqs`, `block_size`, `max_model_len`, `capabilities` (tool/reasoning parsers), `additional_config`, `env`, `args`, `passthrough_env`. `env` is published with the package; `passthrough_env` lists only the *names* of variables whose values the operator supplies at serve time (an object store's endpoint and keys), forwarded by name like `HF_TOKEN` — see [How the container runs](#how-the-container-runs). |
 | `serve_profiles` | optional list of named `ServeProfile`s; each deep-merges over `serve:`. Omit entirely for a single-configuration model. |
 | `default_profile` | required when more than one profile is declared — the author decides the default, not the consumer's luck. |
 | `verify` | build-time Python assertions run **inside the finished image**, on top of the launcher's own import checks. |
@@ -501,7 +501,10 @@ are `HF_HOME`/`HF_TOKEN`, both overridable, so `--print` and tests are determini
   so the ~10 min first compile is paid once), `--volume <weights>:/weight-cache` with
   `TT_DIT_CACHE_DIR` pointing at it, `--publish <port>:<port>`, and the profile's env.
   `HF_TOKEN` is passed by name only so its value never enters an argv `--print`/`ps`
-  would leak.
+  would leak. The same goes for every name in the profile's `passthrough_env` that is set
+  in the caller's environment: `STORE_SECRET_KEY=... tt-model serve org/model` reaches the
+  server, while a name that is not set is left out rather than sent as an empty string.
+  A name the package itself sets in `env` is not forwarded as well.
 
 Both host caches live under one per-model parent, `~/.cache/tt-model/<name>/` — `cache/` for
 JIT kernels, `weights/` for weights already converted to device layout. The second is what

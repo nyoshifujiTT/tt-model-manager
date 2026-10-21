@@ -156,6 +156,14 @@ serve:                          # defaults every profile inherits
     ARCH_NAME: blackhole
     TT_METAL_OPERATION_TIMEOUT_SECONDS: "120.0"
 
+  # Variables the server reads whose VALUES belong to whoever runs it, not to the
+  # package -- an object store's endpoint and keys, say. `env` above is published with
+  # the bundle, so it must never hold them. List only the NAMES here: `serve` forwards
+  # each one that is set in the caller's environment as a bare `--env NAME` (the way it
+  # forwards HF_TOKEN), so the value is copied by docker and never shows in `--print`
+  # or `ps`. Names the caller has not set are left out rather than sent empty.
+  # passthrough_env: [STORE_ENDPOINT, STORE_ACCESS_KEY, STORE_SECRET_KEY]
+
   # kind: vllm-fork only — the readiness runner's --server-timeout.
   # server_timeout: 900
 

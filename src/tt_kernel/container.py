@@ -741,11 +741,15 @@ def compose_run(
     hub_cache_dir: Optional[Path] = None,
     include_hf_token: Optional[bool] = None,
     rootless: bool = False,
+    passthrough_from: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """The full ``docker run`` argv for one serve profile.
 
-    Pure: the only environment it reads is ``HF_HOME``/``HF_HUB_CACHE``/``HF_TOKEN``, and
-    all can be overridden by the caller so tests never depend on the developer's shell.
+    Pure: the only environment it reads is ``HF_HOME``/``HF_HUB_CACHE``/``HF_TOKEN`` and
+    which of the profile's ``passthrough_env`` names are set, and all can be overridden by
+    the caller (``passthrough_from``) so tests never depend on the developer's shell. A
+    passthrough name goes on the argv by name only, so docker copies the value from this
+    process's environment and it never appears in ``--print`` or ``ps``.
     ``rootless`` is passed in rather than probed here for the same reason — the caller
     resolves it with ``docker_is_rootless()``; the safe default matches a rootful daemon.
 
@@ -772,6 +776,8 @@ def compose_run(
         hub = hub_cache()
     if include_hf_token is None:
         include_hf_token = bool(os.environ.get("HF_TOKEN"))
+    if passthrough_from is None:
+        passthrough_from = dict(os.environ)
 
     cmd = ["docker", "run"]
     if detach:
@@ -829,6 +835,12 @@ def compose_run(
         # name only: the value is inherited from the caller's environment rather than
         # being written into an argv that `--print` would display and `ps` would leak.
         cmd += ["--env", "HF_TOKEN"]
+    # The same, for the variables the author declared as the operator's to supply. Only
+    # the ones the caller has set: an unset name would reach the server as an empty
+    # string, which is not what "the operator did not configure this" means to it.
+    for name in profile.passthrough_env:
+        if passthrough_from.get(name) is not None and name not in env:
+            cmd += ["--env", name]
     merged_env = dict(env)
     if device_ids is not None and len(device_ids) == 1:
         # A lone chip that is physically one ASIC of a multi-chip board (e.g. one half of a

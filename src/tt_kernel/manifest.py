@@ -20,9 +20,10 @@ runs is the venv's, not the host's, so no host tt-metal/version check applies.
 
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
 # Current authored schema. ``stage_package`` writes "5" and ``stage_thin_package`` writes "6";
 # this is only the default for a bare ``Manifest(...)``.
@@ -337,6 +338,9 @@ WEIGHTS_REVISION_ENV = "TT_MODEL_WEIGHTS_REVISION"
 AUXILIARY_WEIGHTS_ENV = "TT_AUXILIARY_WEIGHTS"
 
 
+_ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
 class ServeSettings(BaseModel):
     """Launch settings for a container package.
 
@@ -370,6 +374,26 @@ class ServeSettings(BaseModel):
     additional_config: Dict[str, object] = Field(default_factory=dict)
     args: List[object] = Field(default_factory=list)  # str | [str, str] pairs
     env: Dict[str, str] = Field(default_factory=dict)
+    # Names of variables the server reads that belong to whoever RUNS it, not to the
+    # package: credentials and endpoints for services next to the server (an object store,
+    # a database). ``env`` cannot carry them -- it is published with the bundle -- so these
+    # are only declared here, and ``serve`` forwards each one the caller has set, by name,
+    # the way it forwards ``HF_TOKEN``: the value never enters an argv ``--print`` shows.
+    passthrough_env: List[str] = Field(default_factory=list)
+
+    @field_validator("passthrough_env")
+    @classmethod
+    def _passthrough_env_names(cls, names: List[str]) -> List[str]:
+        for name in names:
+            if not isinstance(name, str) or not _ENV_NAME_RE.fullmatch(name):
+                raise ValueError(
+                    f"passthrough_env entry {name!r} is not an environment variable name "
+                    "(letters, digits and '_', not starting with a digit)"
+                )
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(f"passthrough_env lists {duplicates} more than once")
+        return names
 
     def flat_args(self) -> List[str]:
         """Flatten ``[--flag, [--opt, value]]`` into a single argv fragment."""
