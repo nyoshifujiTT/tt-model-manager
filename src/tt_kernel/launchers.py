@@ -1028,7 +1028,7 @@ class HttpServerLauncher:
         # the placeholder checks: those are the author's primary errors, and the two
         # minimal-command golden tests expect them first.
         for arg in command:
-            if not (arg.endswith(".py") or arg.endswith(".sh")) or " " in arg:
+            if not _is_script_arg(arg):
                 continue
             top = arg.split("/")[0]
             if not any(c.split("/")[0] == top for c in m.source.all_code_paths):
@@ -1106,6 +1106,13 @@ class HttpServerLauncher:
         for arg in command:
             for token, value in values.items():
                 arg = arg.replace(token, value)
+            # validate() requires every script the command runs to be shipped by the
+            # allowlist, i.e. to be a path relative to the code root -- but the server
+            # starts in the entrypoint's writable cwd ($HOME/work), not in that root.
+            # Anchor the shipped path to where it lives in the image, or the command
+            # names a file that is not there.
+            if _is_script_arg(arg):
+                arg = f"{IMAGE_CODE_ROOT}/{arg}"
             argv.append(arg)
         argv += profile.flat_args()
         return argv
@@ -1135,6 +1142,17 @@ class HttpServerLauncher:
                 f"{self.name} cannot know what to serve"
             )
         return [str(a) for a in command]
+
+
+# Where source.code / source.extra_code land in the image (docker/Dockerfile:
+# `COPY code/ /opt/tt-metal/`).
+IMAGE_CODE_ROOT = "/opt/tt-metal"
+
+
+def _is_script_arg(arg: str) -> bool:
+    """A bare .py/.sh path in an http-server command: a file the allowlist must ship.
+    A spaced arg is a shell snippet, not a file."""
+    return (arg.endswith(".py") or arg.endswith(".sh")) and " " not in arg
 
 
 def _mesh_shape_env(m: Manifest) -> str:

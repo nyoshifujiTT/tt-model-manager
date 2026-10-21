@@ -367,7 +367,7 @@ def test_http_server_serve_argv_golden():
     m = _wire(**{**HTTP, "serve": {"port": 8000, "args": ["--allocated-context", "131072"]}})
     p = m.container.resolve_profile()
     assert launcher_for("http-server").serve_argv(m, p) == [
-        "python", "models/demos/my_model/tools/server.py",
+        "python", "/opt/tt-metal/models/demos/my_model/tools/server.py",
         "--host", "0.0.0.0", "--port", "8000",
         "--allocated-context", "131072",
     ]
@@ -451,7 +451,7 @@ def test_http_server_serves_embedded_placeholders():
     )
     p = m.container.resolve_profile()
     assert launcher_for("http-server").serve_argv(m, p) == [
-        "python", "models/demos/my_model/tools/server.py",
+        "python", "/opt/tt-metal/models/demos/my_model/tools/server.py",
         "--host=0.0.0.0", "--port=8000",
     ]
 
@@ -465,7 +465,10 @@ def test_http_server_allowlist_covers_top_level_scripts():
     m = _wire(
         **{**HTTP, "source": {**BASE["source"], "code": ["server.py"]}, "runtime": {"command": cmd}}
     )
-    assert launcher_for("http-server").serve_argv(m, m.container.resolve_profile())[1] == "server.py"
+    assert (
+        launcher_for("http-server").serve_argv(m, m.container.resolve_profile())[1]
+        == "/opt/tt-metal/server.py"
+    )
 
 
 def test_http_server_allowlist_covers_shell_launchers():
@@ -480,7 +483,27 @@ def test_http_server_allowlist_covers_shell_launchers():
             "runtime": {"command": cmd},
         }
     )
-    assert launcher_for("http-server").serve_argv(m, m.container.resolve_profile())[1] == "serve.sh"
+    assert (
+        launcher_for("http-server").serve_argv(m, m.container.resolve_profile())[1]
+        == "/opt/tt-metal/serve.sh"
+    )
+
+
+def test_http_server_runs_the_shipped_script_where_the_image_put_it():
+    """validate() insists the script is a path relative to the code root -- that is
+    how it checks the allowlist ships it -- but the server starts in the entrypoint's
+    writable cwd ($HOME/work), where that relative path names nothing. The image COPYs
+    code/ to /opt/tt-metal, so that is where the command has to point; everything that
+    is not a shipped script (the interpreter, flags, values) is left as written."""
+    m = _wire(**{**HTTP, "runtime": {"command": [
+        "bash", "extra/serve.sh", "--config", "conf.yaml", "--port", "{port}",
+    ]}, "source": {**BASE["source"], "code": ["models/common", "extra"]}})
+    assert launcher_for("http-server").serve_argv(m, m.container.resolve_profile()) == [
+        "bash", "/opt/tt-metal/extra/serve.sh", "--config", "conf.yaml", "--port", "8000",
+    ]
+    dockerfile = (Path(container.__file__).parent / "docker" / "Dockerfile").read_text()
+    assert "COPY --chown=tt:tt code/ /opt/tt-metal/" in dockerfile
+    assert "WORKDIR /home/tt/work" in dockerfile
 
 
 def test_http_server_with_an_unknown_placeholder_is_refused():
